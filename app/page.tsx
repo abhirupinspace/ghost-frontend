@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { RefreshCw, SlidersHorizontal, ChevronDown, ArrowLeftRight } from "lucide-react";
+import { RefreshCw, SlidersHorizontal, ChevronDown, ArrowLeftRight, Clock } from "lucide-react";
 import { DotPattern } from "@/components/ui/dot-pattern";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
+import { useWallets } from "@privy-io/react-auth";
 import { CryptoIcon } from "@/components/CryptoIcon";
 import { SelectModal } from "@/components/SelectModal";
-import { OrderBook } from "@/components/OrderBook";
+import { formatAddress } from "@/lib/utils";
 import {
   tokens,
   networks,
@@ -15,10 +15,6 @@ import {
   getTokensForNetwork,
   getRate,
 } from "@/lib/tokens";
-
-function formatAddress(addr: string) {
-  return `${addr.slice(0, 5)}...${addr.slice(-5)}`;
-}
 
 function formatUsd(n: number): string {
   if (n === 0) return "$0.00";
@@ -39,15 +35,17 @@ function splitNumber(n: number): [string, string] {
 type ModalType = "fromToken" | "toToken" | "fromNetwork" | "toNetwork" | null;
 
 export default function Home() {
-  const { ready, authenticated, login, logout } = usePrivy();
   const { wallets } = useWallets();
 
-  const [activeTab, setActiveTab] = useState<"swap" | "pool">("swap");
+  const [activeTab, setActiveTab] = useState<"swap" | "limit">("swap");
   const [fromToken, setFromToken] = useState("bnb");
   const [toToken, setToToken] = useState("usdt");
   const [fromNetwork, setFromNetwork] = useState("bnb");
   const [toNetwork, setToNetwork] = useState("avalanche");
   const [sendAmount, setSendAmount] = useState("");
+  const [limitPrice, setLimitPrice] = useState("");
+  const [limitAmount, setLimitAmount] = useState("");
+  const [limitExpiry, setLimitExpiry] = useState("24h");
   const [modal, setModal] = useState<ModalType>(null);
 
   // Derived
@@ -61,6 +59,10 @@ export default function Home() {
   const sendUsd = sendValue * (fromTokenData?.price || 0);
   const receiveUsd = receiveValue * (toTokenData?.price || 0);
 
+  const limitPriceValue = parseFloat(limitPrice) || 0;
+  const limitAmountValue = parseFloat(limitAmount) || 0;
+  const limitTotal = limitPriceValue * limitAmountValue;
+
   const fromBalance = 23489.89;
   const toBalance = 7575.93;
 
@@ -69,6 +71,12 @@ export default function Home() {
   const handleAmountChange = (value: string) => {
     if (value === "" || /^\d*\.?\d*$/.test(value)) {
       setSendAmount(value);
+    }
+  };
+
+  const handleDecimalInput = (value: string, setter: (v: string) => void) => {
+    if (value === "" || /^\d*\.?\d*$/.test(value)) {
+      setter(value);
     }
   };
 
@@ -166,60 +174,6 @@ export default function Home() {
         className="z-0 text-[#333] [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)]"
       />
 
-      {/* ── Header ── */}
-      <header className="relative z-10 flex items-center justify-between px-8 py-5">
-        <div className="flex items-center gap-8">
-          <div className="text-[20px] tracking-tight">
-            <span className="font-black">GHOST </span>
-            <span className="font-normal">FINANCE</span>
-          </div>
-          <nav className="flex items-center gap-5">
-            <a href="#" className="text-[14px] text-white font-medium">Swap</a>
-            <a href="#" className="text-[14px] text-[#555]">Trade</a>
-            <a href="#" className="text-[14px] text-[#555]">Stake</a>
-          </nav>
-        </div>
-        <div className="flex items-center gap-2">
-          <button className="flex items-center gap-2 px-4 py-2 text-[14px] text-[#999]">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect x="1.5" y="1.5" width="13" height="13" rx="2" stroke="currentColor" strokeWidth="1.2" />
-              <line x1="4" y1="5.5" x2="12" y2="5.5" stroke="currentColor" strokeWidth="1.2" />
-              <line x1="4" y1="8.5" x2="12" y2="8.5" stroke="currentColor" strokeWidth="1.2" />
-              <line x1="4" y1="11.5" x2="9" y2="11.5" stroke="currentColor" strokeWidth="1.2" />
-            </svg>
-            History
-          </button>
-          {ready && authenticated ? (
-            <>
-              {wallets.map((wallet) => (
-                <div
-                  key={wallet.address}
-                  className="flex items-center gap-2 px-3.5 py-2 bg-[#1a1a1e] rounded-full text-[13px] text-[#ccc] border border-[#2a2a2e]"
-                >
-                  <div className="w-[18px] h-[18px] bg-[#222] rounded-[4px] flex items-center justify-center text-[9px] font-bold text-white border border-[#444]">
-                    {wallet.connectorType === "embedded" ? "E" : "W"}
-                  </div>
-                  {formatAddress(wallet.address)}
-                </div>
-              ))}
-              <button
-                onClick={logout}
-                className="px-3.5 py-2 text-[13px] text-[#666] hover:text-[#999] transition-colors cursor-pointer"
-              >
-                Disconnect
-              </button>
-            </>
-          ) : ready ? (
-            <button
-              onClick={login}
-              className="bg-[#e5e044] text-[#111] font-semibold px-5 py-2 rounded-full text-[13px] cursor-pointer hover:brightness-110 transition-all"
-            >
-              Connect Wallet
-            </button>
-          ) : null}
-        </div>
-      </header>
-
       {/* ── Step indicator (swap only) ── */}
       {activeTab === "swap" ? (
         <div className="relative z-10 flex items-center justify-center gap-3 mt-10 mb-8">
@@ -253,12 +207,12 @@ export default function Home() {
             Swap
           </span>
           <span
-            onClick={() => setActiveTab("pool")}
+            onClick={() => setActiveTab("limit")}
             className={`text-[28px] font-semibold cursor-pointer transition-colors ${
-              activeTab === "pool" ? "text-white" : "text-[#555] hover:text-[#888]"
+              activeTab === "limit" ? "text-white" : "text-[#555] hover:text-[#888]"
             }`}
           >
-            Pool
+            Limit
           </span>
           <div className="ml-auto flex items-center gap-4">
             <button className="text-[#777] hover:text-white transition-colors cursor-pointer">
@@ -455,7 +409,7 @@ export default function Home() {
             </div>
           </>
         ) : (
-          /* ════ POOL VIEW ════ */
+          /* ════ LIMIT VIEW ════ */
           <>
             {/* Pair selector */}
             <div className="flex items-center gap-3 mb-5">
@@ -480,36 +434,168 @@ export default function Home() {
                 </span>
                 <ChevronDown size={12} className="text-[#666]" />
               </button>
-              <div className="ml-auto flex items-center -space-x-1.5">
-                <CryptoIcon id={fromToken} size={26} />
-                <CryptoIcon id={toToken} size={26} />
+              <div className="ml-auto text-[13px] text-[#999]">
+                Market: 1 {fromTokenData?.symbol} = {rate.toFixed(ratePrecision)} {toTokenData?.symbol}
               </div>
             </div>
 
-            {/* Stats row */}
-            <div className="grid grid-cols-4 gap-3 mb-5">
-              {[
-                { label: "Last Price", value: rate.toFixed(ratePrecision), color: "text-white" },
-                { label: "24h Change", value: "+2.34%", color: "text-[#4ade80]" },
-                { label: "24h Volume", value: "$12.4M", color: "text-white" },
-                { label: "Liquidity", value: "$84.2M", color: "text-white" },
-              ].map((stat) => (
-                <div
-                  key={stat.label}
-                  className="bg-[#111114] rounded-xl border border-[#1e1e24] p-3"
-                >
-                  <div className="text-[11px] text-[#555] mb-1">{stat.label}</div>
-                  <div className={`text-[14px] font-medium ${stat.color}`}>{stat.value}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Order Book */}
-            {fromTokenData && toTokenData && (
+            {/* Network selectors */}
+            <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-4">
-                <OrderBook baseToken={fromTokenData} quoteToken={toTokenData} />
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#666]">From Network</span>
+                  <button
+                    onClick={() => setModal("fromNetwork")}
+                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
+                    <CryptoIcon id={fromNetwork} size={20} />
+                    <span className="text-[13px] font-medium text-white">
+                      {fromNetworkData?.name}
+                    </span>
+                    <ChevronDown size={12} className="text-[#666]" />
+                  </button>
+                </div>
               </div>
-            )}
+              <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[13px] text-[#666]">To Network</span>
+                  <button
+                    onClick={() => setModal("toNetwork")}
+                    className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                  >
+                    <CryptoIcon id={toNetwork} size={20} />
+                    <span className="text-[13px] font-medium text-white">
+                      {toNetworkData?.name}
+                    </span>
+                    <ChevronDown size={12} className="text-[#666]" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Limit price */}
+            <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-5 mb-3">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[14px] text-white font-medium">Limit Price</span>
+                <button
+                  onClick={() => setLimitPrice(rate.toFixed(ratePrecision))}
+                  className="text-[12px] text-[#e5e044] font-semibold cursor-pointer hover:brightness-110"
+                >
+                  Use Market
+                </button>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={limitPrice}
+                  onChange={(e) => handleDecimalInput(e.target.value, setLimitPrice)}
+                  className="flex-1 text-[32px] font-light leading-none tracking-tight bg-transparent outline-none text-white placeholder:text-[#333]"
+                />
+                <span className="text-[14px] text-[#666]">{toTokenData?.symbol} per {fromTokenData?.symbol}</span>
+              </div>
+              {limitPriceValue > 0 && (
+                <div className="text-[12px] mt-2 text-[#555]">
+                  {limitPriceValue > rate
+                    ? <span className="text-[#4ade80]">{((limitPriceValue / rate - 1) * 100).toFixed(2)}% above market</span>
+                    : limitPriceValue < rate
+                    ? <span className="text-[#f87171]">{((1 - limitPriceValue / rate) * 100).toFixed(2)}% below market</span>
+                    : <span>At market price</span>
+                  }
+                </div>
+              )}
+            </div>
+
+            {/* Amount */}
+            <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-5 mb-3">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[14px] text-white font-medium">Amount</span>
+                <div className="text-[12px] text-[#888]">
+                  Available: {fromBalance.toLocaleString()}{" "}
+                  <span
+                    className="text-[#e5e044] font-semibold cursor-pointer"
+                    onClick={() => setLimitAmount(fromBalance.toString())}
+                  >
+                    MAX
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="0"
+                  value={limitAmount}
+                  onChange={(e) => handleDecimalInput(e.target.value, setLimitAmount)}
+                  className="flex-1 text-[32px] font-light leading-none tracking-tight bg-transparent outline-none text-white placeholder:text-[#333]"
+                />
+                <span className="text-[14px] text-[#666]">{fromTokenData?.symbol}</span>
+              </div>
+              {/* Percentage shortcuts */}
+              <div className="flex gap-2 mt-3">
+                {[25, 50, 75, 100].map((pct) => (
+                  <button
+                    key={pct}
+                    onClick={() => setLimitAmount(((fromBalance * pct) / 100).toString())}
+                    className="px-3 py-1.5 rounded-lg bg-[#1a1a1e] border border-[#2a2a2e] text-[12px] text-[#888] hover:text-white hover:border-[#444] transition-colors cursor-pointer"
+                  >
+                    {pct}%
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Total + Expiry */}
+            <div className="grid grid-cols-2 gap-3 mb-5">
+              <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-5">
+                <span className="text-[13px] text-[#666] block mb-2">You Receive</span>
+                <div className="text-[24px] font-light text-white leading-none">
+                  {limitTotal > 0
+                    ? limitTotal.toLocaleString("en-US", { maximumFractionDigits: 6 })
+                    : <span className="text-[#333]">0</span>
+                  }
+                </div>
+                <span className="text-[12px] text-[#555] mt-1 block">
+                  {limitTotal > 0 ? `≈${formatUsd(limitTotal * (toTokenData?.price || 0))}` : "\u00A0"}
+                </span>
+              </div>
+              <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-5">
+                <span className="text-[13px] text-[#666] block mb-2">Expiry</span>
+                <div className="flex gap-2">
+                  {["1h", "24h", "7d", "30d"].map((exp) => (
+                    <button
+                      key={exp}
+                      onClick={() => setLimitExpiry(exp)}
+                      className={`flex items-center gap-1 px-3 py-2 rounded-lg text-[13px] font-medium cursor-pointer transition-colors ${
+                        limitExpiry === exp
+                          ? "bg-[#e5e044] text-[#111]"
+                          : "bg-[#1a1a1e] border border-[#2a2a2e] text-[#888] hover:text-white hover:border-[#444]"
+                      }`}
+                    >
+                      {exp === limitExpiry && <Clock size={12} />}
+                      {exp}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Place Order CTA */}
+            <button
+              className={`w-full py-4 rounded-full text-[15px] font-semibold transition-all cursor-pointer ${
+                limitPriceValue > 0 && limitAmountValue > 0
+                  ? "bg-[#e5e044] text-[#111] hover:brightness-110"
+                  : "bg-[#1a1a1e] text-[#555] cursor-not-allowed"
+              }`}
+              disabled={limitPriceValue === 0 || limitAmountValue === 0}
+            >
+              {limitPriceValue === 0
+                ? "Enter Limit Price"
+                : limitAmountValue === 0
+                ? "Enter Amount"
+                : "Place Limit Order"}
+            </button>
           </>
         )}
       </div>
