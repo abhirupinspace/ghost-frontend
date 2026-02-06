@@ -1,6 +1,7 @@
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
+import { PythPriceProvider } from "@/contexts/PythPriceContext";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -28,7 +29,9 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         },
       }}
     >
-      {children}
+      <PythPriceProvider>
+        {children}
+      </PythPriceProvider>
     </PrivyProvider>
   );
 }

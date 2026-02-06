@@ -5,6 +5,7 @@ import { ChevronDown, ChevronUp, Gift, Lock, TrendingUp } from "lucide-react";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { CryptoIcon } from "@/components/CryptoIcon";
 import { getTokenById } from "@/lib/tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 interface Pool {
   id: string;
@@ -43,20 +44,23 @@ function fmtUsd(n: number): string {
 }
 
 export default function StakePage() {
+  const { prices } = usePythPrices();
   const [expanded, setExpanded] = useState<string | null>(null);
   const [stakeTab, setStakeTab] = useState<"stake" | "unstake">("stake");
   const [stakeAmount, setStakeAmount] = useState("");
 
+  const getLivePrice = (tokenId: string) => prices[tokenId] ?? getTokenById(tokenId)?.price ?? 0;
+
   // Overview
-  const totalStakedUsd = pools.reduce((s, p) => s + p.staked * (getTokenById(p.token)?.price || 0), 0);
-  const totalRewardsUsd = pools.reduce((s, p) => s + p.rewards * (getTokenById(p.token)?.price || 0), 0);
+  const totalStakedUsd = pools.reduce((s, p) => s + p.staked * getLivePrice(p.token), 0);
+  const totalRewardsUsd = pools.reduce((s, p) => s + p.rewards * getLivePrice(p.token), 0);
   const activePools = pools.filter((p) => p.staked > 0).length;
   const avgApy =
     activePools > 0
       ? pools
           .filter((p) => p.staked > 0)
           .reduce((s, p) => {
-            const val = p.staked * (getTokenById(p.token)?.price || 0);
+            const val = p.staked * getLivePrice(p.token);
             return s + p.apy * (val / totalStakedUsd);
           }, 0)
       : 0;
@@ -109,7 +113,7 @@ export default function StakePage() {
         <div className="flex flex-col gap-3">
           {pools.map((pool) => {
             const token = getTokenById(pool.token);
-            const price = token?.price || 0;
+            const price = getLivePrice(pool.token);
             const stakedUsd = pool.staked * price;
             const rewardsUsd = pool.rewards * price;
             const isOpen = expanded === pool.id;

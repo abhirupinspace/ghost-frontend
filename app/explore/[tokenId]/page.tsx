@@ -9,6 +9,7 @@ import { DotPattern } from "@/components/ui/dot-pattern";
 import { SelectModal } from "@/components/SelectModal";
 import { tokens, getTokenById, getNetworkById } from "@/lib/tokens";
 import { exploreTokens, getExploreToken, formatCompact, formatPrice } from "@/lib/explore-tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 // ── Helpers ──
 function seededRandom(seed: number) {
@@ -285,14 +286,16 @@ export default function TokenDetailPage() {
   const tokenId = params.tokenId as string;
   const token = getExploreToken(tokenId);
   const tokenInfo = getTokenById(tokenId);
+  const { prices: livePrices } = usePythPrices();
+  const livePrice = livePrices[tokenId] ?? token?.price ?? 0;
 
   const [timeframe, setTimeframe] = useState<Timeframe>("1D");
   const [showFullDesc, setShowFullDesc] = useState(false);
 
   const chartData = useMemo(() => {
     if (!token) return { prices: [], labels: [] };
-    return generateChartData(tokenId, timeframe, token.price);
-  }, [tokenId, timeframe, token]);
+    return generateChartData(tokenId, timeframe, livePrice);
+  }, [tokenId, timeframe, token, livePrice]);
 
   if (!token) {
     return (
@@ -305,7 +308,7 @@ export default function TokenDetailPage() {
     );
   }
 
-  const priceChange = token.price * (token.change1d / 100);
+  const priceChange = livePrice * (token.change1d / 100);
   const positive = token.change1d >= 0;
   const tokenNetworks = tokenInfo?.networks || [];
   const descTruncated = token.description.length > 180;
@@ -341,7 +344,7 @@ export default function TokenDetailPage() {
               </div>
             </div>
             <div className="flex items-baseline gap-3">
-              <span className="text-[32px] font-semibold tracking-tight">{formatPrice(token.price)}</span>
+              <span className="text-[32px] font-semibold tracking-tight">{formatPrice(livePrice)}</span>
               <span className={`text-[14px] font-medium flex items-center gap-1 ${positive ? "text-[#4ade80]" : "text-[#f87171]"}`}>
                 {positive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 {formatPrice(Math.abs(priceChange))} ({Math.abs(token.change1d).toFixed(2)}%)
@@ -402,7 +405,7 @@ export default function TokenDetailPage() {
             {/* Order Book */}
             <div className="mb-8">
               <div className="text-[14px] font-semibold text-[#999] mb-4">Order Book</div>
-              <OrderBook tokenId={tokenId} price={token.price} />
+              <OrderBook tokenId={tokenId} price={livePrice} />
             </div>
           </div>
 

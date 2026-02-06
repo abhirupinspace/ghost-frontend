@@ -8,13 +8,12 @@ import { CryptoIcon } from "@/components/CryptoIcon";
 import { SelectModal } from "@/components/SelectModal";
 import { formatAddress } from "@/lib/utils";
 import {
-  tokens,
   networks,
   getTokenById,
   getNetworkById,
   getTokensForNetwork,
-  getRate,
 } from "@/lib/tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 function formatUsd(n: number): string {
   if (n === 0) return "$0.00";
@@ -48,16 +47,21 @@ export default function Home() {
   const [limitExpiry, setLimitExpiry] = useState("24h");
   const [modal, setModal] = useState<ModalType>(null);
 
+  // Live prices from Pyth
+  const { prices } = usePythPrices();
+
   // Derived
   const fromTokenData = getTokenById(fromToken);
   const toTokenData = getTokenById(toToken);
   const fromNetworkData = getNetworkById(fromNetwork);
   const toNetworkData = getNetworkById(toNetwork);
-  const rate = getRate(fromToken, toToken);
+  const fromPrice = prices[fromToken] ?? fromTokenData?.price ?? 0;
+  const toPrice = prices[toToken] ?? toTokenData?.price ?? 0;
+  const rate = toPrice > 0 ? fromPrice / toPrice : 0;
   const sendValue = parseFloat(sendAmount) || 0;
   const receiveValue = sendValue * rate;
-  const sendUsd = sendValue * (fromTokenData?.price || 0);
-  const receiveUsd = receiveValue * (toTokenData?.price || 0);
+  const sendUsd = sendValue * fromPrice;
+  const receiveUsd = receiveValue * toPrice;
 
   const limitPriceValue = parseFloat(limitPrice) || 0;
   const limitAmountValue = parseFloat(limitAmount) || 0;
@@ -96,17 +100,9 @@ export default function Home() {
     if (side === "from") {
       if (tokenId === toToken) setToToken(fromToken);
       setFromToken(tokenId);
-      const token = getTokenById(tokenId);
-      if (token && !token.networks.includes(fromNetwork)) {
-        setFromNetwork(token.networks[0]);
-      }
     } else {
       if (tokenId === fromToken) setFromToken(toToken);
       setToToken(tokenId);
-      const token = getTokenById(tokenId);
-      if (token && !token.networks.includes(toNetwork)) {
-        setToNetwork(token.networks[0]);
-      }
     }
   };
 
@@ -130,15 +126,15 @@ export default function Home() {
     switch (modal) {
       case "fromToken":
         return {
-          title: "Select Token",
-          items: tokens.map((t) => ({ id: t.id, name: t.name, symbol: t.symbol })),
+          title: `Select Token on ${fromNetworkData?.name ?? "Network"}`,
+          items: getTokensForNetwork(fromNetwork).map((t) => ({ id: t.id, name: t.name, symbol: t.symbol })),
           selectedId: fromToken,
           onSelect: (id: string) => handleTokenSelect("from", id),
         };
       case "toToken":
         return {
-          title: "Select Token",
-          items: tokens.map((t) => ({ id: t.id, name: t.name, symbol: t.symbol })),
+          title: `Select Token on ${toNetworkData?.name ?? "Network"}`,
+          items: getTokensForNetwork(toNetwork).map((t) => ({ id: t.id, name: t.name, symbol: t.symbol })),
           selectedId: toToken,
           onSelect: (id: string) => handleTokenSelect("to", id),
         };
@@ -166,7 +162,7 @@ export default function Home() {
   const ratePrecision = rate >= 100 ? 2 : rate >= 1 ? 4 : 6;
 
   return (
-    <div className="min-h-screen bg-[#0b0b0e] text-white font-sans relative overflow-hidden">
+    <div className="min-h-screen bg-[#0b0b0e] text-white font-sans relative overflow-hidden flex flex-col items-center pt-25 pb-10">
       <DotPattern
         cr={1.2}
         width={24}
@@ -174,28 +170,8 @@ export default function Home() {
         className="z-0 text-[#333] [mask-image:radial-gradient(ellipse_at_center,white,transparent_80%)]"
       />
 
-      {/* ── Step indicator (swap only) ── */}
-      {activeTab === "swap" ? (
-        <div className="relative z-10 flex items-center justify-center gap-3 mt-10 mb-8">
-          <div className="flex items-center gap-2.5 px-5 py-2.5 rounded-full border border-[#333] text-[14px]">
-            <span className="text-white font-medium">1</span>
-            <span className="text-white">Select tokens</span>
-          </div>
-          {[2, 3, 4].map((n) => (
-            <div
-              key={n}
-              className="w-[42px] h-[42px] rounded-full border border-[#333] flex items-center justify-center text-[14px] text-[#555]"
-            >
-              {n}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-10 mb-8" />
-      )}
-
       {/* ── Main card ── */}
-      <div className="relative z-10 max-w-[820px] mx-auto bg-[#161619] rounded-[20px] p-7 border border-[#1e1e24]">
+      <div className="relative z-10 max-w-[820px] w-full mx-auto bg-[#161619] rounded-[20px] p-7 border border-[#1e1e24]">
         {/* Tab bar */}
         <div className="flex items-center mb-6">
           <span
@@ -247,20 +223,6 @@ export default function Home() {
                   </div>
                   <div className="flex items-end">
                     <div className="flex-1">
-                      <div className="text-[12px] text-[#666] mb-2.5">Token</div>
-                      <button
-                        onClick={() => setModal("fromToken")}
-                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-                      >
-                        <CryptoIcon id={fromToken} size={30} />
-                        <span className="text-[15px] font-medium text-white">
-                          {fromTokenData?.symbol}
-                        </span>
-                        <ChevronDown size={14} className="text-[#666]" />
-                      </button>
-                    </div>
-                    <span className="text-[#333] text-[18px] mx-3 mb-1">/</span>
-                    <div className="flex-1">
                       <div className="text-[12px] text-[#666] mb-2.5">Network</div>
                       <button
                         onClick={() => setModal("fromNetwork")}
@@ -269,6 +231,20 @@ export default function Home() {
                         <CryptoIcon id={fromNetwork} size={30} />
                         <span className="text-[15px] font-medium text-white">
                           {fromNetworkData?.name}
+                        </span>
+                        <ChevronDown size={14} className="text-[#666]" />
+                      </button>
+                    </div>
+                    <span className="text-[#333] text-[18px] mx-3 mb-1">/</span>
+                    <div className="flex-1">
+                      <div className="text-[12px] text-[#666] mb-2.5">Token</div>
+                      <button
+                        onClick={() => setModal("fromToken")}
+                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                      >
+                        <CryptoIcon id={fromToken} size={30} />
+                        <span className="text-[15px] font-medium text-white">
+                          {fromTokenData?.symbol}
                         </span>
                         <ChevronDown size={14} className="text-[#666]" />
                       </button>
@@ -293,20 +269,6 @@ export default function Home() {
                   </div>
                   <div className="flex items-end">
                     <div className="flex-1">
-                      <div className="text-[12px] text-[#666] mb-2.5">Token</div>
-                      <button
-                        onClick={() => setModal("toToken")}
-                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
-                      >
-                        <CryptoIcon id={toToken} size={30} />
-                        <span className="text-[15px] font-medium text-white">
-                          {toTokenData?.symbol}
-                        </span>
-                        <ChevronDown size={14} className="text-[#666]" />
-                      </button>
-                    </div>
-                    <span className="text-[#333] text-[18px] mx-3 mb-1">/</span>
-                    <div className="flex-1">
                       <div className="text-[12px] text-[#666] mb-2.5">Network</div>
                       <button
                         onClick={() => setModal("toNetwork")}
@@ -315,6 +277,20 @@ export default function Home() {
                         <CryptoIcon id={toNetwork} size={30} />
                         <span className="text-[15px] font-medium text-white">
                           {toNetworkData?.name}
+                        </span>
+                        <ChevronDown size={14} className="text-[#666]" />
+                      </button>
+                    </div>
+                    <span className="text-[#333] text-[18px] mx-3 mb-1">/</span>
+                    <div className="flex-1">
+                      <div className="text-[12px] text-[#666] mb-2.5">Token</div>
+                      <button
+                        onClick={() => setModal("toToken")}
+                        className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity"
+                      >
+                        <CryptoIcon id={toToken} size={30} />
+                        <span className="text-[15px] font-medium text-white">
+                          {toTokenData?.symbol}
                         </span>
                         <ChevronDown size={14} className="text-[#666]" />
                       </button>
@@ -395,11 +371,10 @@ export default function Home() {
             <div className="flex items-end justify-between mt-6">
               <div>
                 <div className="text-[13px] text-[#999]">
-                  1 {fromTokenData?.symbol} = {rate.toFixed(ratePrecision)} {toTokenData?.symbol}{" "}
-                  <span className="text-[#4ade80]">▲ 5.62% (24H)</span>
+                  1 {fromTokenData?.symbol} = {rate.toFixed(ratePrecision)} {toTokenData?.symbol}
                 </div>
                 <div className="text-[12px] text-[#555] mt-1">
-                  Rate is for reference only. Updated just now
+                  Live rate via Pyth Network
                 </div>
               </div>
               <button className="bg-[#e5e044] text-[#111] font-semibold px-8 py-3.5 rounded-full text-[15px] cursor-pointer hover:brightness-110 transition-all">
@@ -411,34 +386,6 @@ export default function Home() {
         ) : (
           /* ════ LIMIT VIEW ════ */
           <>
-            {/* Pair selector */}
-            <div className="flex items-center gap-3 mb-5">
-              <button
-                onClick={() => setModal("fromToken")}
-                className="flex items-center gap-2 px-3 py-2 bg-[#111114] rounded-xl border border-[#1e1e24] hover:border-[#2a2a2e] transition-colors cursor-pointer"
-              >
-                <CryptoIcon id={fromToken} size={22} />
-                <span className="text-[14px] font-medium text-white">
-                  {fromTokenData?.symbol}
-                </span>
-                <ChevronDown size={12} className="text-[#666]" />
-              </button>
-              <span className="text-[#555] text-[16px]">/</span>
-              <button
-                onClick={() => setModal("toToken")}
-                className="flex items-center gap-2 px-3 py-2 bg-[#111114] rounded-xl border border-[#1e1e24] hover:border-[#2a2a2e] transition-colors cursor-pointer"
-              >
-                <CryptoIcon id={toToken} size={22} />
-                <span className="text-[14px] font-medium text-white">
-                  {toTokenData?.symbol}
-                </span>
-                <ChevronDown size={12} className="text-[#666]" />
-              </button>
-              <div className="ml-auto text-[13px] text-[#999]">
-                Market: 1 {fromTokenData?.symbol} = {rate.toFixed(ratePrecision)} {toTokenData?.symbol}
-              </div>
-            </div>
-
             {/* Network selectors */}
             <div className="grid grid-cols-2 gap-3 mb-3">
               <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-4">
@@ -470,6 +417,34 @@ export default function Home() {
                     <ChevronDown size={12} className="text-[#666]" />
                   </button>
                 </div>
+              </div>
+            </div>
+
+            {/* Token pair selector */}
+            <div className="flex items-center gap-3 mb-5">
+              <button
+                onClick={() => setModal("fromToken")}
+                className="flex items-center gap-2 px-3 py-2 bg-[#111114] rounded-xl border border-[#1e1e24] hover:border-[#2a2a2e] transition-colors cursor-pointer"
+              >
+                <CryptoIcon id={fromToken} size={22} />
+                <span className="text-[14px] font-medium text-white">
+                  {fromTokenData?.symbol}
+                </span>
+                <ChevronDown size={12} className="text-[#666]" />
+              </button>
+              <span className="text-[#555] text-[16px]">/</span>
+              <button
+                onClick={() => setModal("toToken")}
+                className="flex items-center gap-2 px-3 py-2 bg-[#111114] rounded-xl border border-[#1e1e24] hover:border-[#2a2a2e] transition-colors cursor-pointer"
+              >
+                <CryptoIcon id={toToken} size={22} />
+                <span className="text-[14px] font-medium text-white">
+                  {toTokenData?.symbol}
+                </span>
+                <ChevronDown size={12} className="text-[#666]" />
+              </button>
+              <div className="ml-auto text-[13px] text-[#999]">
+                Market: 1 {fromTokenData?.symbol} = {rate.toFixed(ratePrecision)} {toTokenData?.symbol}
               </div>
             </div>
 
@@ -557,7 +532,7 @@ export default function Home() {
                   }
                 </div>
                 <span className="text-[12px] text-[#555] mt-1 block">
-                  {limitTotal > 0 ? `≈${formatUsd(limitTotal * (toTokenData?.price || 0))}` : "\u00A0"}
+                  {limitTotal > 0 ? `≈${formatUsd(limitTotal * toPrice)}` : "\u00A0"}
                 </span>
               </div>
               <div className="bg-[#111114] rounded-2xl border border-[#1e1e24] p-5">

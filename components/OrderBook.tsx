@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import type { Token } from "@/lib/tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 interface Order {
   price: number;
@@ -26,7 +27,10 @@ function hashString(str: string): number {
 }
 
 export function OrderBook({ baseToken, quoteToken }: { baseToken: Token; quoteToken: Token }) {
-  const midPrice = baseToken.price / quoteToken.price;
+  const { prices } = usePythPrices();
+  const basePrice = prices[baseToken.id] ?? baseToken.price;
+  const quotePrice = prices[quoteToken.id] ?? quoteToken.price;
+  const midPrice = quotePrice > 0 ? basePrice / quotePrice : baseToken.price / quoteToken.price;
   const pricePrecision = midPrice >= 100 ? 2 : midPrice >= 1 ? 4 : 6;
 
   const { asks, bids, maxTotal } = useMemo(() => {

@@ -6,6 +6,7 @@ import { Search, ChevronDown, LayoutGrid } from "lucide-react";
 import { CryptoIcon } from "@/components/CryptoIcon";
 import { DotPattern } from "@/components/ui/dot-pattern";
 import { exploreTokens, formatCompact, formatPrice } from "@/lib/explore-tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 type SortKey = "volume" | "price" | "change1h" | "change1d" | "fdv";
 type TabKey = "tokens" | "auctions" | "pools" | "transactions";
@@ -50,6 +51,7 @@ function ChangeCell({ value }: { value: number }) {
 }
 
 export default function ExplorePage() {
+  const { prices } = usePythPrices();
   const [activeTab, setActiveTab] = useState<TabKey>("tokens");
   const [sortKey, setSortKey] = useState<SortKey>("volume");
   const [sortAsc, setSortAsc] = useState(false);
@@ -83,12 +85,18 @@ export default function ExplorePage() {
       );
     }
     list.sort((a, b) => {
-      const aVal = a[sortKey];
-      const bVal = b[sortKey];
+      let aVal: number, bVal: number;
+      if (sortKey === "price") {
+        aVal = prices[a.id] ?? a.price;
+        bVal = prices[b.id] ?? b.price;
+      } else {
+        aVal = a[sortKey];
+        bVal = b[sortKey];
+      }
       return sortAsc ? aVal - bVal : bVal - aVal;
     });
     return list;
-  }, [searchQuery, sortKey, sortAsc]);
+  }, [searchQuery, sortKey, sortAsc, prices]);
 
   const SortArrow = ({ col }: { col: SortKey }) => {
     if (sortKey !== col) return null;
@@ -224,7 +232,7 @@ export default function ExplorePage() {
                   <span className="text-[14px] text-white font-medium">{token.name}</span>
                   <span className="text-[13px] text-[#555]">{token.symbol}</span>
                 </div>
-                <span className="text-[14px] text-white text-right">{formatPrice(token.price)}</span>
+                <span className="text-[14px] text-white text-right">{formatPrice(prices[token.id] ?? token.price)}</span>
                 <span className="text-[13px] text-right">
                   <ChangeCell value={token.change1h} />
                 </span>

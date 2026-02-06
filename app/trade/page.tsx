@@ -6,7 +6,8 @@ import { DotPattern } from "@/components/ui/dot-pattern";
 import { CryptoIcon } from "@/components/CryptoIcon";
 import { SelectModal } from "@/components/SelectModal";
 import { OrderBook } from "@/components/OrderBook";
-import { tokens, getTokenById, getRate } from "@/lib/tokens";
+import { tokens, getTokenById } from "@/lib/tokens";
+import { usePythPrices } from "@/contexts/PythPriceContext";
 
 function seededRandom(seed: number) {
   let s = seed;
@@ -33,9 +34,12 @@ export default function TradePage() {
   const [amount, setAmount] = useState("");
   const [modal, setModal] = useState<"base" | "quote" | null>(null);
 
+  const { prices } = usePythPrices();
   const baseData = getTokenById(baseToken);
   const quoteData = getTokenById(quoteToken);
-  const rate = getRate(baseToken, quoteToken);
+  const basePrice = prices[baseToken] ?? baseData?.price ?? 0;
+  const quotePrice = prices[quoteToken] ?? quoteData?.price ?? 0;
+  const rate = quotePrice > 0 ? basePrice / quotePrice : 0;
   const precision = rate >= 100 ? 2 : rate >= 1 ? 4 : 6;
 
   const priceValue = orderType === "market" ? rate : (parseFloat(limitPrice) || 0);
@@ -163,16 +167,18 @@ export default function TradePage() {
           <div className="flex items-center gap-6">
             {[
               { label: "Last Price", value: rate.toFixed(precision), cls: "text-white" },
-              { label: "24h Change", value: "+2.34%", cls: "text-[#4ade80]" },
               { label: "24h High", value: (rate * 1.028).toFixed(precision), cls: "text-white" },
               { label: "24h Low", value: (rate * 0.972).toFixed(precision), cls: "text-white" },
-              { label: "24h Volume", value: "$12.4M", cls: "text-white" },
             ].map((s) => (
               <div key={s.label}>
                 <div className="text-[11px] text-[#555]">{s.label}</div>
                 <div className={`text-[15px] font-medium ${s.cls}`}>{s.value}</div>
               </div>
             ))}
+            <div>
+              <div className="text-[11px] text-[#555]">Source</div>
+              <div className="text-[13px] font-medium text-[#999]">Pyth Network</div>
+            </div>
           </div>
         </div>
 
